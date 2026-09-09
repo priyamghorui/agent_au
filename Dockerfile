@@ -1,5 +1,5 @@
 # Update to match the required 1.62.0 image version
-FROM mcr.microsoft.com/playwright/python:v1.62.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy
 
 WORKDIR /app
 
