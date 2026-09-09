@@ -753,100 +753,140 @@ INDEX_HTML = """
             </a>
     </footer>
 
-    <script>
-        lucide.createIcons();
+<script>
+    lucide.createIcons();
 
-        const defaultSubjectsList = """ + str(DEFAULT_SUBJECTS) + """;
+    const defaultSubjectsList = """ + str(DEFAULT_SUBJECTS) + """;
+    document.getElementById("subjectsInput").value = defaultSubjectsList.join(", ");
+
+    function resetDefaultSubjects() {
         document.getElementById("subjectsInput").value = defaultSubjectsList.join(", ");
+    }
 
-        function resetDefaultSubjects() {
-            document.getElementById("subjectsInput").value = defaultSubjectsList.join(", ");
-        }
+    const clientId = Math.random().toString(36).substring(7);
+    const wsProtocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${wsProtocol}//${location.host}/ws/${clientId}`);
 
-        const clientId = Math.random().toString(36).substring(7);
-        const wsProtocol = location.protocol === "https:" ? "wss:" : "ws:";
-        const ws = new WebSocket(`${wsProtocol}//${location.host}/ws/${clientId}`);
+    const statusIndicator = document.getElementById("statusIndicator");
+    const submitBtn = document.getElementById("submitBtn");
 
-        const statusIndicator = document.getElementById("statusIndicator");
+    // Helper functions to manage button UI state
+    function disableSubmitButton() {
+        submitBtn.disabled = true;
+        submitBtn.classList.add("opacity-50", "cursor-not-allowed");
+        submitBtn.classList.remove("hover:bg-brand-700");
+        submitBtn.innerHTML = `
+            <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+            <span>Automation Running...</span>
+        `;
+        lucide.createIcons();
+    }
 
-        ws.onopen = () => {
-            statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
-            addLog("Connected to WebSocket server.", "info");
-        };
+    function enableSubmitButton() {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove("opacity-50", "cursor-not-allowed");
+        submitBtn.classList.add("hover:bg-brand-700");
+        submitBtn.innerHTML = `
+            <i data-lucide="play" class="w-4 h-4"></i>
+            <span>Start Automated Submission</span>
+        `;
+        lucide.createIcons();
+    }
 
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if(data.type === "status") {
-                if(data.status === "TASK_SUCCESS") {
-                    statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
-                } else {
-                    statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
-                }
-            }
-            addLog(data.message, data.type || "info");
-        };
+    ws.onopen = () => {
+        statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+        addLog("Connected to WebSocket server.", "info");
+    };
 
-        ws.onclose = () => {
-            statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-slate-600";
-            addLog("WebSocket disconnected.", "warning");
-        };
-
-        function addLog(message, type = "info") {
-            const logsDiv = document.getElementById("logs");
-            const div = document.createElement("div");
-            
-            let color = "text-slate-300";
-            if (type === "error") color = "text-rose-400 font-semibold";
-            if (type === "warning") color = "text-amber-400";
-            if (type === "success") color = "text-emerald-400";
-
-            const timestamp = new Date().toLocaleTimeString();
-            div.className = `${color} leading-relaxed flex items-start space-x-2`;
-            div.innerHTML = `<span class="text-slate-600 flex-shrink-0">[${timestamp}]</span> <span>${message}</span>`;
-            
-            logsDiv.appendChild(div);
-            logsDiv.scrollTop = logsDiv.scrollHeight;
-        }
-
-        function clearLogs() {
-            document.getElementById("logs").innerHTML = "";
-        }
-
-        async function startAutomation() {
-            const reg_no = document.getElementById("regNo").value;
-            const password = document.getElementById("password").value;
-            const rawSubjects = document.getElementById("subjectsInput").value;
-
-            if (!reg_no || !password) {
-                addLog("Validation Error: Missing registration number or password.", "error");
-                return;
-            }
-
-            const subjects = rawSubjects.split(",").map(s => s.trim()).filter(Boolean);
-
-            statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse";
-            addLog("Initiating request to background worker...", "info");
-
-            try {
-                const response = await fetch(`/api/submit-feedback?client_id=${clientId}`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ reg_no, password, subjects })
-                });
-
-                const data = await response.json();
-                if (data.status === "error") {
-                    addLog(data.message, "error");
-                    statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
-                } else {
-                    addLog(data.message, "info");
-                }
-            } catch (error) {
-                addLog("HTTP Request Failed: " + error, "error");
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        
+        // Handle task status updates to re-enable button when execution completes
+        if (data.type === "status") {
+            if (data.status === "TASK_SUCCESS") {
+                statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+            } else {
                 statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
             }
+            // Re-enable button when task finishes or fails
+            enableSubmitButton();
         }
-    </script>
+
+        if (data.type === "error" && data.status === "TASK_ERROR") {
+            statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+            enableSubmitButton();
+        }
+
+        addLog(data.message, data.type || "info");
+    };
+
+    ws.onclose = () => {
+        statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-slate-600";
+        addLog("WebSocket disconnected.", "warning");
+        enableSubmitButton();
+    };
+
+    function addLog(message, type = "info") {
+        const logsDiv = document.getElementById("logs");
+        const div = document.createElement("div");
+        
+        let color = "text-slate-300";
+        if (type === "error") color = "text-rose-400 font-semibold";
+        if (type === "warning") color = "text-amber-400";
+        if (type === "success") color = "text-emerald-400";
+
+        const timestamp = new Date().toLocaleTimeString();
+        div.className = `${color} leading-relaxed flex items-start space-x-2`;
+        div.innerHTML = `<span class="text-slate-600 flex-shrink-0">[${timestamp}]</span> <span>${message}</span>`;
+        
+        logsDiv.appendChild(div);
+        logsDiv.scrollTop = logsDiv.scrollHeight;
+    }
+
+    function clearLogs() {
+        document.getElementById("logs").innerHTML = "";
+    }
+
+    async function startAutomation() {
+        const reg_no = document.getElementById("regNo").value;
+        const password = document.getElementById("password").value;
+        const rawSubjects = document.getElementById("subjectsInput").value;
+
+        if (!reg_no || !password) {
+            addLog("Validation Error: Missing registration number or password.", "error");
+            return;
+        }
+
+        const subjects = rawSubjects.split(",").map(s => s.trim()).filter(Boolean);
+
+        // Immediately disable the button to prevent duplicate executions
+        disableSubmitButton();
+
+        statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse";
+        addLog("Initiating request to background worker...", "info");
+
+        try {
+            const response = await fetch(`/api/submit-feedback?client_id=${clientId}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reg_no, password, subjects })
+            });
+
+            const data = await response.json();
+            if (data.status === "error") {
+                addLog(data.message, "error");
+                statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+                enableSubmitButton();
+            } else {
+                addLog(data.message, "info");
+            }
+        } catch (error) {
+            addLog("HTTP Request Failed: " + error, "error");
+            statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+            enableSubmitButton();
+        }
+    }
+</script>
 </body>
 </html>
 """
