@@ -451,7 +451,12 @@ async def submit_student_feedback(
         browser = None
         try:
             await log("Launching headless browser context...", "info")
-            browser = await p.chromium.launch(headless=True)
+            browser = await p.chromium.launch(headless=True,args=[
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu"
+    ])
             context = await browser.new_context()
             page = await context.new_page()
 
