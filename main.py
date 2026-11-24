@@ -493,11 +493,12 @@ INDEX_HTML = """
 <!-- Feedback Agent Heading Section -->
 <div class="border-b border-slate-800/80 pb-4 mb-6">
     <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-400 text-[11px] font-semibold tracking-wide uppercase mb-2">
-        <i data-lucide="bot" class="w-3.5 h-3.5"></i> Autonomous Agent v1.0
+        <i data-lucide="bot" class="w-3.5 h-3.5"></i> Autonomous Agent v1.5
     </div>
     <h1 class="text-xl font-bold bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent leading-snug">
         Feedback Agent <span class="text-xs font-normal text-slate-400 block sm:inline">(Our First Agentic Model)</span>
     </h1>
+    <p class="text-xs text-slate-400 mt-1">Update : Fix if portal redirect to "Feedback Already Submitted".</p>
     <p class="text-xs text-slate-400 mt-1">Automates pending course evaluations end-to-end via headless web interaction.</p>
 </div>
         <!-- App Section -->

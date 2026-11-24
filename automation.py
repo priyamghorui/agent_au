@@ -428,7 +428,9 @@ DEFAULT_SUBJECTS = [
     "Mini Project-II",
     "Domain Specific Predictive Analysis",
     "Unstructured Databases",
-    "Introduction to Python Programming"
+    "Introduction to Python Programming",
+    "Competitive Programming-I",
+    "Competitive Programming Lab"
 ]
 
 async def submit_student_feedback(
@@ -443,25 +445,32 @@ async def submit_student_feedback(
     async def log(message: str, status_type: str = "info"):
         if status_callback:
             await status_callback({"message": message, "type": status_type})
-        print(f"[{status_type.upper()}] {message}")
+        # print(f"[{status_type.upper()}] {message}")
 
     target_subjects = [s.strip() for s in subjects if s.strip()] if subjects else DEFAULT_SUBJECTS
 
     async with async_playwright() as p:
         browser = None
         try:
-            await log("Launching headless browser context...", "info")
-            browser = await p.chromium.launch(headless=True,args=[
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu"
-    ])
+            await log("Launching browser context...", "info")
+            browser = await p.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu"
+                ]
+            )
             context = await browser.new_context()
             page = await context.new_page()
 
             await log("Navigating to Adamas Student Portal...", "info")
-            await page.goto("https://adamasknowledgecity.ac.in/student/dashboard", wait_until="domcontentloaded", timeout=30000)
+            await page.goto(
+                "https://adamasknowledgecity.ac.in/student/dashboard",
+                wait_until="domcontentloaded",
+                timeout=30000
+            )
 
             await log("Authenticating user...", "info")
             await page.get_by_role("textbox", name="Registration No.").fill(reg_no)
@@ -481,17 +490,17 @@ async def submit_student_feedback(
 
             for subject in target_subjects:
                 await log(f"Evaluating subject: '{subject}'", "info")
-                temp = 1
+                btn_index = 0  # .nth() is 0-indexed
                 subject_success = False
 
                 while True:
                     try:
-                        heading = page.get_by_role("heading", name=subject, exact=True)
-                        if await heading.count() == 0:
+                        subject_heading = page.get_by_role("heading", name=subject, exact=True)
+                        if await subject_heading.count() == 0:
                             await log(f"Subject '{subject}' not found on active dashboard.", "warning")
                             break
 
-                        await heading.click()
+                        await subject_heading.click()
                         await page.wait_for_timeout(2000)
 
                         locator = page.get_by_text("Pending Feedback", exact=False)
@@ -510,29 +519,45 @@ async def submit_student_feedback(
                             await log(f"No pending feedback for '{subject}'.", "info")
                             subject_success = True
                             break
-                        elif pending_count == 1:
-                            await page.get_by_text("Give Feedback", exact=True).click()
-                        else:
-                            await page.get_by_text("Give Feedback").nth(temp).click()
 
+                        feedback_btns = page.get_by_text("Give Feedback", exact=True)
+                        got_it = page.get_by_text("Got it")
+                        total_btns = await feedback_btns.count()
+
+                        if btn_index >= total_btns:
+                            await log(f"No more valid feedback buttons available for '{subject}'.", "info")
+                            if await got_it.is_visible():
+                                await got_it.click()
+                            break
+
+                        await feedback_btns.nth(btn_index).click()
                         await page.wait_for_timeout(2000)
 
-                        # Error toast validation
-                        error_toast = page.get_by_text("×Feedback ErrorNo classes")
-                        if await error_toast.count() > 0:
-                            if temp >= 2:
-                                break
-                            temp += 1
+                        already_submitted = page.get_by_role("heading", name="Feedback Already Submitted")
+                        error_toast = page.get_by_text("Feedback Error", exact=False)
+
+                        is_submitted = await already_submitted.is_visible()
+                        has_error = await error_toast.count() > 0
+
+                        if is_submitted or has_error:
+                            if is_submitted:
+                                await page.get_by_role("link", name="Home").click()
+                                await page.wait_for_timeout(1500)
+                            btn_index += 1
                             continue
 
-                        # Execute radio button selection
+                        # Execute radio button selection and form submission
                         await page.locator("#yes_0_0").check()
                         await page.locator("#yes_0_4").check()
-                        await page.get_by_role("button", name=" Submit Feedback").click()
+                        await page.get_by_role("textbox", name=re.compile(r"Additional Comments", re.I)).fill(
+                            "This is an automated system made by Priyam Ghorui. Please visit https://www.priyamghorui.com/ or https://agent-au-1.onrender.com/"
+                        )
+                        await page.get_by_role("button", name=re.compile(r"Submit Feedback", re.I)).click()
                         await page.wait_for_timeout(2000)
 
                         await log(f"Successfully submitted entry for '{subject}'.", "success")
                         subject_success = True
+                        btn_index = 0  # Reset index since submitted item leaves the pending list
 
                     except Exception as sub_err:
                         await log(f"Error handling feedback for '{subject}': {str(sub_err)}", "warning")
@@ -543,7 +568,7 @@ async def submit_student_feedback(
                     completed_count += 1
 
             await log("Finalizing session & logging out safely...", "info")
-            logout_btn = page.get_by_role("link", name=" Logout")
+            logout_btn = page.get_by_role("link", name=re.compile(r"Logout", re.I))
             if await logout_btn.count() > 0:
                 await logout_btn.click()
 
